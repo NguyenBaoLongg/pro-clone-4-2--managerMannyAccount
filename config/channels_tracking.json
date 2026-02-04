@@ -1,0 +1,18 @@
+{
+    "channels": [
+        {
+            "channel_url": "https://www.tiktok.com/@blogtamsu.nghenghiep",
+            "last_video_url": "https://www.tiktok.com/@blogtamsu.nghenghiep/video/7602860575286136084",
+            "scan_limit": 4,
+            "video_index": 0,
+            "active": true
+        },
+        {
+            "channel_url": "https://www.tiktok.com/@tamsudaokeo28",
+            "last_video_url": "https://www.tiktok.com/@tamsudaokeo28/video/7602584611587149064",
+            "scan_limit": 5,
+            "video_index": 0,
+            "active": true
+        }
+    ]
+}

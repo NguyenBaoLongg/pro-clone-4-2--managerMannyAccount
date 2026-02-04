@@ -1,0 +1,16 @@
+{
+    "accounts": [
+        {
+            "email": "cexat1122@gmail.com",
+            "password": "nguyenbaolong1105",
+            "tiktok_id": "empowercongdongthammy20",
+            "active": true
+        },
+        {
+            "email": "baolong11052004@gmail.com",
+            "password": "nguyenbaolong1105",
+            "tiktok_id": "@nguyenbaolong826",
+            "active": true
+        }
+    ]
+}
