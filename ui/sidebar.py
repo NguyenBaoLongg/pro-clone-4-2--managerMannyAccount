@@ -12,7 +12,8 @@ def render_sidebar():
             [
                 "🤖 Dashboard (Chạy Bot)",
                 "👤 Quản lý Tài khoản TikTok",
-                "📺 Quản lý Kênh Clone",  # <--- MỤC MỚI
+                "📺 Quản lý Kênh Clone",
+                "🌐 Quản lý Chrome Profile",  # <--- ĐÃ THÊM MỤC NÀY
                 "🔑 Cấu hình API & Hệ thống"
             ],
             index=0,

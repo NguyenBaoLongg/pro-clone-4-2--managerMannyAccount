@@ -3,7 +3,7 @@ import sys
 import json
 import time
 import requests
-
+import shutil
 # ================= CẤU HÌNH ĐƯỜNG DẪN =================
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(PROJECT_ROOT)
@@ -32,7 +32,7 @@ USER_SETTINGS_FILE = os.path.join(PROJECT_ROOT, "user_settings.json")
 # Thư mục tạm lưu voice (Giữ nguyên như code cũ của bạn)
 TEMP_VOICE_DIR = os.path.join(PROJECT_ROOT, "assets", "temp_voice")
 if not os.path.exists(TEMP_VOICE_DIR): os.makedirs(TEMP_VOICE_DIR)
-
+TEMP_DOWNLOADS_DIR = os.path.join(PROJECT_ROOT, "assets", "temp_downloads")
 # ID Folder Drive cố định (hoặc lấy từ config nếu muốn)
 FOLDER_ID = "1VgkkbUJ82kxzWXJH8cfn7UFMMFBKQkzS"
 
@@ -144,6 +144,25 @@ def handle_tts_process(api_key, text, voice_id, prefix, row_idx):
 
     return None, None
 
+def clean_temp_downloads():
+    print("   🧹 Đang dọn dẹp thư mục tải về tạm thời...")
+    if os.path.exists(TEMP_DOWNLOADS_DIR):
+        try:
+            # Xóa tất cả các file trong folder
+            for filename in os.listdir(TEMP_DOWNLOADS_DIR):
+                file_path = os.path.join(TEMP_DOWNLOADS_DIR, filename)
+                try:
+                    if os.path.isfile(file_path) or os.path.islink(file_path):
+                        os.unlink(file_path)
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)
+                except Exception as e:
+                    print(f"   ⚠️ Không xóa được {file_path}: {e}")
+            print("   ✅ Đã xóa sạch folder temp_downloads.")
+        except Exception as e:
+            print(f"   ❌ Lỗi dọn dẹp: {e}")
+
+
 # ================= CORE LOGIC (Process Row) =================
 # Hàm này thay thế cho vòng lặp trong code cũ, được Scheduler gọi tới
 
@@ -221,7 +240,7 @@ def process_viral_row(row_idx, local_video_path, current_channel_link, current_t
                     if t_path: os.remove(t_path)
                     if c_path: os.remove(c_path)
                 except: pass
-
+                clean_temp_downloads()
                 return True
             else:
                 print("   ❌ Lỗi: Không lấy được Link Drive.")

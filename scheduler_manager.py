@@ -161,15 +161,15 @@ class SchedulerManager:
                 print(f"   ▶️ Xử lý: {vid_link} (Nguồn: {src_url})")
 
                 local_path = download_tiktok_video(vid_link, TEMP_VIDEO_DIR)
-                if local_path and os.path.exists(local_path):
-                    if run_ai_studio_uploader(local_path):
+                if local_path and os.path.exists(local_path["ai_studio"]) and os.path.exists(local_path["original"]) :
+                    if run_ai_studio_uploader(local_path["ai_studio"]):
                         print("   ✅ Upload OK. Đợi xử lý...")
                         time.sleep(15)
 
                         row_idx = get_last_row_index(SHEET_URL)
                         if row_idx > 1:
                             # Truyền cả TikTok ID và Source URL để render đúng config
-                            process_viral_row(row_idx, local_path, src_url, current_tiktok_id=tiktok_id)
+                            process_viral_row(row_idx, local_path["original"], src_url, current_tiktok_id=tiktok_id)
 
                         update_channel_last_video(src_url, vid_link)
                     else:

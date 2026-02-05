@@ -163,8 +163,6 @@ def render_segment_to_file(video_filename, audio_filename, output_filename, sett
     video_speed = random.uniform(0.95, 1.05)
 
     # 2. Volume (Âm lượng Biz): Thay đổi nhẹ âm lượng video gốc (nếu có dùng video gốc làm nền âm thanh)
-    # Lưu ý: Code này đang dùng Audio TTS làm chính, Audio gốc video thường bị bỏ qua.
-    # Nhưng ta vẫn chỉnh filter để bypass hash.
 
     # 3. Distort (Bóp méo): Dùng lenscorrection để làm cong nhẹ hình (1-2%)
     k1_distort = random.uniform(-0.03, 0.03) # -2% đến +2%
@@ -273,14 +271,6 @@ def render_segment_to_file(video_filename, audio_filename, output_filename, sett
     # -----------------------------------------------------------------------
     # 6. Xử lý AUDIO (Chỉnh âm lượng + Tốc độ) [MỚI]
     # -----------------------------------------------------------------------
-
-    # A. Chỉnh Tốc độ Audio (Pitch/Tempo) phải khớp với Video Speed
-    # atempo chỉ hỗ trợ từ 0.5 đến 2.0. Nếu video_speed thay đổi, audio phải thay đổi theo.
-    # Lưu ý: a_in ở đây là file TTS (Giọng đọc AI).
-    # Nếu bạn muốn chỉnh speed cho giọng đọc thì dùng dòng dưới:
-    # a_in = a_in.filter('atempo', video_speed)
-    # TUY NHIÊN: Thường giọng đọc AI người ta để tốc độ chuẩn.
-    # Code này mình sẽ áp dụng thay đổi volume cho giọng đọc.
 
     # B. Tăng/Giảm Âm lượng (Volume Biz)
     # Random volume từ 0.9 (90%) đến 1.3 (130%)

@@ -4,14 +4,14 @@
             "email": "cexat1122@gmail.com",
             "password": "nguyenbaolong1105",
             "tiktok_id": "empowercongdongthammy20",
-            "active": false
+            "active": true
         },
         {
             "email": "baolong11052004@gmail.com",
             "password": "nguyenbaolong1105",
             "tiktok_id": "@nguyenbaolong826",
-            "active": true
+            "active": false
         }
     ],
-    "current_index": 1
+    "current_index": 0
 }
