@@ -138,7 +138,7 @@ def load_render_config(target_channel_url=None, target_tiktok_id=None):
     return default_config
 
 # ==============================================================================
-# 3. CORE RENDER SEGMENT (XỬ LÝ CẮT & LẶP)
+# 3. CORE RENDER SEGMENT (XỬ LÝ CẮT, LẶP, VÀ HIỆU ỨNG NÂNG CAO)
 # ==============================================================================
 def render_segment_to_file(video_filename, audio_filename, output_filename, settings, text_settings, text_content, frame_filename, temp_dir):
     if not os.path.exists(video_filename): return False
@@ -156,7 +156,25 @@ def render_segment_to_file(video_filename, audio_filename, output_filename, sett
     s_start = float(settings.get("source_start", 0))
     raw_end = settings.get("source_end", "auto")
     zoom = float(settings.get("zoom_factor", 1.0))
-    speed = random.uniform(1.02, 1.05)
+
+    # [TÍNH NĂNG MỚI] Random các tham số biến đổi
+    # -----------------------------------------------------
+    # 1. Speed (Tốc độ): Tăng/Giảm ngẫu nhiên từ 0.95 (chậm) đến 1.05 (nhanh)
+    video_speed = random.uniform(0.95, 1.05)
+
+    # 2. Volume (Âm lượng Biz): Thay đổi nhẹ âm lượng video gốc (nếu có dùng video gốc làm nền âm thanh)
+    # Lưu ý: Code này đang dùng Audio TTS làm chính, Audio gốc video thường bị bỏ qua.
+    # Nhưng ta vẫn chỉnh filter để bypass hash.
+
+    # 3. Distort (Bóp méo): Dùng lenscorrection để làm cong nhẹ hình (1-2%)
+    k1_distort = random.uniform(-0.03, 0.03) # -2% đến +2%
+    k2_distort = random.uniform(-0.03, 0.03)
+
+    # 4. Filter màu (Color Grading nhẹ): Thay đổi contrast, brightness, saturation
+    contrast_val = random.uniform(1.0, 1.1)     # Tăng tương phản nhẹ
+    brightness_val = random.uniform(-0.02, 0.02) # Tăng giảm độ sáng nhẹ
+    saturation_val = random.uniform(0.9, 1.2)    # Tăng giảm độ bão hòa
+    # -----------------------------------------------------
 
     v_in = ffmpeg.input(video_filename)
     a_in = ffmpeg.input(audio_filename)
@@ -166,7 +184,6 @@ def render_segment_to_file(video_filename, audio_filename, output_filename, sett
 
     if raw_end != "auto" and raw_end is not None:
         val = float(raw_end)
-
         # Nếu là số âm (VD: -8) -> Lấy tổng thời gian - 8
         if val < 0:
             real_end = total_video_duration + val
@@ -185,17 +202,33 @@ def render_segment_to_file(video_filename, audio_filename, output_filename, sett
         v = v_in.filter('trim', start=s_start) # Cắt từ start đến hết
 
     # 4. [QUAN TRỌNG] Reset Time & Loop
-    # - setpts=PTS-STARTPTS: Đặt lại thời gian của đoạn VỪA CẮT về 00:00
-    # - loop: Lặp lại ĐOẠN VỪA CẮT (vì stream 'v' lúc này chỉ chứa đoạn cắt)
     v = v.filter('setpts', 'PTS-STARTPTS')
     v = v.filter('loop', loop=-1, size=32767, start=0)
 
-    # 5. Xử lý hình ảnh (Zoom, Speed, Overlay)
+    # -----------------------------------------------------------------------
+    # 5. Xử lý HIỆU ỨNG (VISUAL EFFECTS) - Áp dụng các filter mới
+    # -----------------------------------------------------------------------
+
+    # A. Thay đổi Tốc độ Video (Speed)
+    # setpts < 1 là nhanh, > 1 là chậm. Ví dụ speed 1.05 -> setpts = 1/1.05
+    v = v.filter('setpts', f'PTS/{video_speed}')
+
+    # B. Zoom & Scale
     target_w = 1080
     scaled_w = int(target_w * zoom)
     if scaled_w % 2 != 0: scaled_w += 1
+    v = v.filter('scale', width=scaled_w, height=-2)
 
-    v = v.filter('setpts', f'PTS/{speed}').filter('scale', width=scaled_w, height=-2).filter('eq', contrast=1.05)
+    # C. Bóp méo (Distort) - Lens Correction [MỚI]
+    # k1, k2: các hệ số bóp méo (quadratic correction). Giá trị nhỏ (0.01-0.05) tạo hiệu ứng nhẹ.
+    v = v.filter('lenscorrection', k1=k1_distort, k2=k2_distort)
+
+    # D. Color Filter (Lớp phủ màu/ánh sáng) [MỚI]
+    # eq: chỉnh contrast, brightness, saturation
+    v = v.filter('eq', contrast=contrast_val, brightness=brightness_val, saturation=saturation_val)
+
+    # Thêm nhiễu hạt siêu nhỏ (Noise) để thay đổi từng pixel (giúp lách bản quyền tốt hơn)
+    # v = v.filter('noise', alls=5, allf='t+u') # (Tùy chọn: Có thể bật nếu muốn, nhưng sẽ làm nặng render)
 
     # Tạo nền đen khớp thời lượng Audio
     bg = ffmpeg.input(f'color=c=black:s=1080x1920:d={duration_audio}', f='lavfi')
@@ -205,7 +238,7 @@ def render_segment_to_file(video_filename, audio_filename, output_filename, sett
     x_expr = '(W-w)/2' if str(raw_x) == 'center' else f'(W-w)/2 + {raw_x}'
     y_expr = '(H-h)/2' if str(raw_y) == 'center' else f'(H-h)/2 + {raw_y}'
 
-    # Ghép video đã loop vào nền đen (để đảm bảo video dài đúng bằng audio)
+    # Ghép video đã loop vào nền đen
     v = ffmpeg.overlay(bg, v, x=x_expr, y=y_expr, shortest=1)
 
     # Thêm Frame
@@ -236,6 +269,23 @@ def render_segment_to_file(video_filename, audio_filename, output_filename, sett
                 shadowcolor="black", shadowx=2, shadowy=2,
                 x='(w-text_w)/2', y=str(current_line_y), fix_bounds=True
             )
+
+    # -----------------------------------------------------------------------
+    # 6. Xử lý AUDIO (Chỉnh âm lượng + Tốc độ) [MỚI]
+    # -----------------------------------------------------------------------
+
+    # A. Chỉnh Tốc độ Audio (Pitch/Tempo) phải khớp với Video Speed
+    # atempo chỉ hỗ trợ từ 0.5 đến 2.0. Nếu video_speed thay đổi, audio phải thay đổi theo.
+    # Lưu ý: a_in ở đây là file TTS (Giọng đọc AI).
+    # Nếu bạn muốn chỉnh speed cho giọng đọc thì dùng dòng dưới:
+    # a_in = a_in.filter('atempo', video_speed)
+    # TUY NHIÊN: Thường giọng đọc AI người ta để tốc độ chuẩn.
+    # Code này mình sẽ áp dụng thay đổi volume cho giọng đọc.
+
+    # B. Tăng/Giảm Âm lượng (Volume Biz)
+    # Random volume từ 0.9 (90%) đến 1.3 (130%)
+    audio_vol = random.uniform(0.9, 1.3)
+    a_in = a_in.filter('volume', volume=audio_vol)
 
     try:
         (
@@ -377,5 +427,75 @@ def create_video_from_source_video(
         os.chdir(original_cwd)
         if os.path.exists(temp_dir): shutil.rmtree(temp_dir, ignore_errors=True)
 
+# ==============================================================================
+# 5. TEST UNIT (CHẠY THỬ)
+# ==============================================================================
 if __name__ == "__main__":
-    pass
+    print("🧪 --- BẮT ĐẦU TEST MODULE VIDEO REMIX ---")
+
+    # ---------------------------------------------------------
+    # BƯỚC 1: CẤU HÌNH INPUT GIẢ LẬP (SỬA ĐƯỜNG DẪN TẠI ĐÂY)
+    # ---------------------------------------------------------
+    # Hãy trỏ đến 1 file video và 1 file mp3 có thật trên máy tính của bạn để test
+    # Lưu ý: Dùng r"..." để tránh lỗi đường dẫn Windows
+
+    # Ví dụ: r"D:\Downloads\video_goc.mp4"
+    fake_video_source = r"D:\US\Lõm Hóp\Videos\Mọi người lưu ý nhé!.mp4"
+
+    # Ví dụ: r"D:\Downloads\audio_tts.mp3"
+    fake_audio_content = r"C:\Users\Acer\Downloads\tiktok_Mấy_bà_hay_than_thở_80fe982bba43.mp3"
+
+    # (Tùy chọn) Audio tiêu đề
+    fake_audio_title = r"C:\Users\Acer\Downloads\tiktok_Hướng_dẫn_chụp_ảnh_n_49825f9f84bd.mp3"
+
+    # ---------------------------------------------------------
+    # BƯỚC 2: TẠO FILE DUMMY NẾU CHƯA CÓ (CHỈ ĐỂ TRÁNH LỖI KHI CODE CHẠY)
+    # ---------------------------------------------------------
+    if not os.path.exists(fake_video_source):
+        print(f"⚠️ Không thấy file video test tại: {fake_video_source}")
+        print("👉 Vui lòng sửa biến 'fake_video_source' trỏ đến 1 file MP4 có thật.")
+
+    if not os.path.exists(fake_audio_content):
+        print(f"⚠️ Không thấy file audio test tại: {fake_audio_content}")
+        print("👉 Vui lòng sửa biến 'fake_audio_content' trỏ đến 1 file MP3 có thật.")
+
+    # ---------------------------------------------------------
+    # BƯỚC 3: CHẠY HÀM RENDER
+    # ---------------------------------------------------------
+    if os.path.exists(fake_video_source) and os.path.exists(fake_audio_content):
+        print("\n🚀 Đang chạy lệnh render...")
+
+        try:
+            result_path = create_video_from_source_video(
+                audio_url=fake_audio_content,           # Audio nội dung
+                source_video_url=fake_video_source,     # Video nền
+                title_audio_url=fake_audio_title,       # Audio tiêu đề (Intro)
+
+                # Nội dung Text
+                title_tiktok="TEST TITLE HEADER",
+                content_text="Day la noi dung test thu nghiem.\nVideo se duoc cat va lap lai.",
+
+                # Giả lập config
+                target_channel_url="https://www.tiktok.com/@tamsudaokeo28",
+                tiktok_id="@nguyenbaolong826",
+
+                # File output
+                output_filename="test_result_video.mp4",
+
+                # Debug row index
+                row_index=999
+            )
+
+            if result_path and os.path.exists(result_path):
+                print(f"\n✅ TEST THÀNH CÔNG!")
+                print(f"📂 File kết quả: {result_path}")
+                print(f"⏱️ Hãy mở file lên xem video có bị đen màn hình hay không.")
+            else:
+                print("\n❌ TEST THẤT BẠI: Hàm chạy xong nhưng không thấy file output.")
+
+        except Exception as e:
+            print(f"\n❌ TEST ERROR (CRASH): {e}")
+            import traceback
+            traceback.print_exc()
+    else:
+        print("\n⛔ DỪNG TEST: Thiếu file input.")
