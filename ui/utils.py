@@ -26,7 +26,8 @@ RENDER_CONFIG_FILE = os.path.join(CONFIG_DIR, "render_config.json")
 USER_SETTINGS_FILE = os.path.join(PROJECT_ROOT, "user_settings.json")
 SCHEDULE_FILE = os.path.join(CONFIG_DIR, "schedule_config.json")
 SESSION_CONFIG_FILE = os.path.join(CONFIG_DIR, "session_config.json")
-
+ACCOUNTS_DIR = os.path.join(CONFIG_DIR, "accounts")
+if not os.path.exists(ACCOUNTS_DIR): os.makedirs(ACCOUNTS_DIR)
 # --- HELPER FUNCTIONS ---
 def load_json(filepath):
     if os.path.exists(filepath):

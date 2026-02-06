@@ -13,8 +13,9 @@ def render_sidebar():
                 "🤖 Dashboard (Chạy Bot)",
                 "👤 Quản lý Tài khoản TikTok",
                 "📺 Quản lý Kênh Clone",
-                "🌐 Quản lý Chrome Profile",  # <--- ĐÃ THÊM MỤC NÀY
-                "🔑 Cấu hình API & Hệ thống"
+                "🌐 Quản lý Chrome Profile",
+                "🔑 Cấu hình API & Hệ thống",
+                "🔐 Google Credentials"
             ],
             index=0,
             key="sidebar_main_nav"

@@ -2,143 +2,202 @@ import requests
 import json
 
 # ==============================================================================
-# 1. HÀM ĐỌC DỮ LIỆU (READ) - [ĐÃ SỬA: BỎ XUỐNG DÒNG]
+# 1. CÁC HÀM GHI DỮ LIỆU (WRITE)
 # ==============================================================================
-def get_data_from_sheet(script_url, row_number=None):
-    if not script_url:
-        return None
 
-    # Chuẩn bị payload
-    payload = {"action": "read"}
-    if row_number:
-        payload["row"] = int(row_number)
+def save_to_sheet(script_url, link, title, script, combined_hints, original_video, title_tiktok, tiktok_id, file_path=""):
+    """
+    [CŨ - CHO UI] Lưu dòng dữ liệu mới vào Sheet (Action: save)
+    """
+    if not script_url: return None
+
+    payload = {
+        "action": "save",
+        "link": link,
+        "title": title,
+        "script": script,
+        "combined_hints": combined_hints,
+        "original_video": original_video,
+        "title_tiktok": title_tiktok,
+        "tiktok_id": tiktok_id, # Cột N
+        "file_path": file_path
+    }
 
     try:
-        # Tăng timeout lên 30s để tránh bị ngắt kết nối sớm nếu mạng chậm
-        res = requests.post(script_url, json=payload, timeout=30)
-
-        # Kiểm tra nếu server trả về lỗi (không phải JSON)
-        if res.status_code != 200:
-            print(f"❌ Lỗi kết nối Sheet: {res.status_code}")
-            return None
-
-        data = res.json()
-
-        if data.get("status") == "success":
-            # --- XỬ LÝ TEXT: BỎ XUỐNG DÒNG ---
-            raw_title = data.get("title_text", "")
-            # Thay thế xuống dòng bằng khoảng trắng và cắt khoảng trắng thừa 2 đầu
-            clean_title = raw_title.replace("\n", " ").strip() if raw_title else ""
-
-            raw_content = data.get("content_text", "")
-            # Thay thế xuống dòng bằng khoảng trắng
-            clean_content = raw_content.replace("\n", " ").strip() if raw_content else ""
-            # ---------------------------------
-
-            return (
-                data.get("url", "").strip(),
-                clean_title,
-                clean_content,
-                data.get("row"),
-                data.get("existing_content_audio", ""),
-                data.get("existing_title_audio", ""),
-                data.get("image_prompts", []),
-                data.get("original_video_url", ""),
-                data.get("title_tiktok", ""),
-                "OK"
-            )
-        else:
-            print(f"⚠️ Sheet báo lỗi: {data.get('message')}")
-            return None
-
+        response = requests.post(script_url, json=payload, timeout=20)
+        return response.json()
     except Exception as e:
-        print(f"❌ Lỗi Exception Sheet: {e}")
-        return None
+        print(f"❌ Lỗi Save to Sheet: {e}")
+        return {"status": "error", "message": str(e)}
 
-# ==============================================================================
-# 2. HÀM CẬP NHẬT THÔNG TIN (UPDATE)
-# ==============================================================================
 def update_tiktok_info(script_url, row, file_path=None, link_tiktok=None, title_tiktok=None):
     """
-    Gửi thông tin cập nhật (Link video, File path...) lên Sheet - GIỮ NGUYÊN
+    [CŨ/MỚI] Cập nhật thông tin cơ bản (Action: update_tiktok_info)
     """
     try:
-        payload = {
-            "action": "update_tiktok_info",
-            "row": row
-        }
+        payload = {"action": "update_tiktok_info", "row": int(row)}
         if file_path: payload["file_path"] = str(file_path)
         if link_tiktok: payload["link_tiktok"] = str(link_tiktok)
         if title_tiktok: payload["title_tiktok"] = str(title_tiktok)
 
         requests.post(script_url, json=payload, timeout=20)
         return True
+    except: return False
+
+def update_final_result(script_url, row_idx, drive_link):
+    """
+    [MỚI] Cập nhật link Drive video thành phẩm (Dùng action update_file_path để set trạng thái)
+    """
+    try:
+        payload = {
+            "action": "update_file_path",
+            "row": int(row_idx),
+            "file_path": str(drive_link)
+        }
+        requests.post(script_url, json=payload, timeout=20)
+        return True
+    except: return False
+
+def update_voice_links(sheet_url, row, title_voice_link, content_voice_link):
+    """
+    [MỚI] Cập nhật link Voice vào cột D và F (Action: update_voice)
+    """
+    try:
+        payload = {
+            "action": "update_voice",
+            "row": int(row),
+            "title_voice": str(title_voice_link) if title_voice_link else "",
+            "content_voice": str(content_voice_link) if content_voice_link else ""
+        }
+        requests.post(sheet_url, json=payload, timeout=20)
+        return True
     except Exception as e:
-        print(f"❌ Lỗi update info: {e}")
+        print(f"❌ Lỗi update voice: {e}")
         return False
 
-def update_status_to_sheet(sheet_url, row_idx, content):
+def update_status_finish(script_url, row, link_tiktok):
     """
-    Wrapper đơn giản: Cập nhật link TikTok vào cột Video - GIỮ NGUYÊN
+    [CŨ - CHO TOOL UPLOAD TIKTOK] Xác nhận đã đăng xong (Action: finish_upload)
     """
-    print(f"📝 Đang lưu link vào dòng {row_idx}...")
-    return update_tiktok_info(sheet_url, row_idx, link_tiktok=content)
-
-# ------------------------------------------------------------------------------
-# 2 HÀM NÀY ĐỂ KHỚP VỚI APPS SCRIPT "update_voice"
-# ------------------------------------------------------------------------------
-def save_audio_link_to_sheet(script_url, row, audio_link):
-    """Lưu Voice Nội dung (Cột F)"""
     try:
         payload = {
-            "action": "update_voice",
-            "content_voice": str(audio_link),
-            "row": int(row)
+            "action": "finish_upload",
+            "row": int(row),
+            "link_tiktok": str(link_tiktok)
         }
-        requests.post(script_url, json=payload, timeout=20)
-        return True
+        res = requests.post(script_url, json=payload, timeout=20)
+        return res.json().get("status") == "success"
     except: return False
 
-def save_title_audio_to_sheet(script_url, row, audio_link):
-    """Lưu Voice Tiêu đề (Cột D)"""
+# ==============================================================================
+# 2. CÁC HÀM ĐỌC DỮ LIỆU (READ)
+# ==============================================================================
+
+def get_data_from_sheet(script_url, row_number=None):
+    """
+    [CŨ/MỚI] Đọc 1 dòng cụ thể (Action: read)
+    """
+    if not script_url: return None
+
+    payload = {"action": "read"}
+    if row_number: payload["row"] = int(row_number)
+
     try:
-        payload = {
-            "action": "update_voice",
-            "title_voice": str(audio_link),
-            "row": int(row)
-        }
-        requests.post(script_url, json=payload, timeout=20)
-        return True
-    except: return False
-# ------------------------------------------------------------------------------
+        res = requests.post(script_url, json=payload, timeout=30)
+        if res.status_code != 200: return None
+
+        data = res.json()
+        if data.get("status") == "success":
+            # Xử lý text
+            raw_title = data.get("title_text", "")
+            clean_title = raw_title.replace("\n", " ").strip() if raw_title else ""
+            raw_content = data.get("content_text", "")
+            clean_content = raw_content.replace("\n", " ").strip() if raw_content else ""
+
+            return (
+                data.get("url", "").strip(),            # 0
+                clean_title,                            # 1
+                clean_content,                          # 2
+                data.get("row"),                        # 3
+                data.get("existing_content_audio", ""), # 4
+                data.get("existing_title_audio", ""),   # 5
+                data.get("image_prompts", []),          # 6
+                data.get("original_video_url", ""),     # 7
+                data.get("tiktok_id", ""),              # 8 [QUAN TRỌNG: ID TikTok]
+                data.get("title_tiktok", ""),           # 9
+                data.get("status", "")                  # 10
+            )
+        else: return None
+    except: return None
+
+def get_pending_tasks(script_url):
+    """
+    [CŨ - CHO TOOL UPLOAD TIKTOK] Lấy danh sách video chờ đăng (Action: read_pending)
+    """
+    if not script_url: return []
+    try:
+        payload = {"action": "read_pending"}
+        res = requests.post(script_url, json=payload, timeout=30)
+        data = res.json()
+        if data.get("status") == "success":
+            return data.get("tasks", [])
+        return []
+    except: return []
 
 # ==============================================================================
-# 3. HÀM LẤY DÒNG CUỐI (QUAN TRỌNG - FIX TREO) - GIỮ NGUYÊN
+# 3. CÁC HÀM QUÉT DỮ LIỆU THÔNG MINH (SCAN)
 # ==============================================================================
+
 def get_last_row_index(sheet_url):
-    """
-    Hàm này lấy dòng cuối cùng có dữ liệu.
-    Đã thêm Timeout ngắn (5s) để không bị treo nếu mạng lag.
-    """
     try:
-        # Gửi row="" để Apps Script hiểu là muốn lấy thông tin chung (hoặc dòng cuối)
         payload = {"action": "read", "row": ""}
-
-        # Timeout 5s: Nếu quá 5s không trả lời thì bỏ qua để Bot chạy tiếp
+        # Gửi request
         response = requests.post(sheet_url, json=payload, timeout=10)
 
-        data = response.json()
+        # --- DEBUG: In ra phản hồi nếu không phải 200 OK ---
+        if response.status_code != 200:
+            print(f"❌ HTTP Error {response.status_code}: {response.text}")
+            return 0
+
+        try:
+            data = response.json()
+        except Exception as json_err:
+            print(f"❌ Lỗi đọc JSON (Có thể Script bị Crash): {response.text[:200]}...") # In 200 ký tự đầu
+            return 0
 
         if data.get("status") == "success":
-            # Nếu script trả về row, dùng nó. Nếu không, mặc định trả về 0
             return int(data.get("row", 0))
-
         return 0
 
-    except requests.exceptions.Timeout:
-        print("⚠️ Lấy dòng cuối bị Timeout (quá 5s) -> Bỏ qua.")
-        return 0
     except Exception as e:
-        print(f"❌ Lỗi lấy dòng cuối: {e}")
+        print(f"🔥 Lỗi Exception: {e}")
         return 0
 
+def get_latest_row_by_id(sheet_url, tiktok_id):
+    if not sheet_url: return "SHeet không đúng"
+    def norm(x):
+        return str(x).replace("@","").strip().lower()
+
+    target = norm(tiktok_id)
+    last_row = get_last_row_index(sheet_url)
+    scan_limit = 200
+    for r in range(last_row, max(1, last_row - scan_limit), -1):
+        data = get_data_from_sheet(sheet_url, r)
+        if not data:
+            continue
+
+        sheet_id = norm(data[8])
+        content = data[2]
+        title = data[1]
+        if target == sheet_id:
+            if content and len(content) > 5:
+                return {
+                    "row": r,
+                    "title_text": title,
+                    "content_text": content,
+                    "tiktok_id_sheet": sheet_id
+                }
+            else:
+                print(f"Row {r} match ID but no text yet, waiting...")
+                continue
+    return None

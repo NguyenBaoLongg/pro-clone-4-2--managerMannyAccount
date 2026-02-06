@@ -15,7 +15,6 @@ CONFIG_DIR  = os.path.join(PROJECT_ROOT, "config")
 # Đường dẫn file credentials và token bên trong folder config
 CREDENTIALS_FILE = os.path.join(CONFIG_DIR, 'credentials.json')
 TOKEN_FILE = os.path.join(CONFIG_DIR, 'token.pickle')
-
 if not os.path.exists(CONFIG_DIR):
     os.makedirs(CONFIG_DIR)
 # ======================================================

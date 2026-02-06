@@ -5,7 +5,7 @@ import yt_dlp
 import shutil
 import time
 import subprocess # Dùng để gọi FFmpeg nén video
-
+import requests
 # Xác định đường dẫn gốc dự án
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(MODULE_DIR)

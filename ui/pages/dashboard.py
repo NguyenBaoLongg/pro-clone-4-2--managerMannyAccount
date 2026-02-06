@@ -4,186 +4,150 @@ import subprocess
 import sys
 import pandas as pd
 import os
+import glob
 from ui.utils import (
     load_json, save_json, normalize_time_input,
-    ACCOUNTS_FILE, TRACKING_FILE, SCHEDULE_FILE, SESSION_CONFIG_FILE, PROJECT_ROOT, CONFIG_DIR
+    TRACKING_FILE, SCHEDULE_FILE, SESSION_CONFIG_FILE, PROJECT_ROOT,
+    ACCOUNTS_DIR
 )
 
-def render_dashboard():
-    st.markdown("## 🤖 Dashboard Điều khiển")
-    st.caption("Chọn Tài khoản, Kênh nguồn & Cấu hình thời gian chạy.")
+def get_all_account_configs():
+    """Quét toàn bộ file json trong config/accounts"""
+    if not os.path.exists(ACCOUNTS_DIR): os.makedirs(ACCOUNTS_DIR)
+    files = glob.glob(os.path.join(ACCOUNTS_DIR, "*.json"))
 
-    # Load dữ liệu
-    accounts_data = load_json(ACCOUNTS_FILE)
-    tracking_data = load_json(TRACKING_FILE)
+    acc_list = []
+    for f in files:
+        data = load_json(f)
+        data['_filename'] = os.path.basename(f)
+        if "active" not in data: data["active"] = False
+        acc_list.append(data)
+
+    acc_list.sort(key=lambda x: x.get("id", ""))
+    return acc_list
+
+def update_account_file(filename, data):
+    path = os.path.join(ACCOUNTS_DIR, filename)
+    save_json(path, data)
+
+def render_dashboard():
+    st.markdown("## 🤖 Dashboard Điều khiển (Matrix Mode)")
+    st.caption(f"Dữ liệu tài khoản load từ: `{ACCOUNTS_DIR}`")
+
+    all_accounts = get_all_account_configs()
     schedule_data = load_json(SCHEDULE_FILE)
 
     if "crawl_times" not in schedule_data: schedule_data["crawl_times"] = ["07:00", "12:00"]
     if "nurture_windows" not in schedule_data: schedule_data["nurture_windows"] = []
 
-    acc_list = accounts_data.get("accounts", [])
-    chn_list = tracking_data if isinstance(tracking_data, list) else tracking_data.get("channels", [])
+    # --- KHU VỰC CHÍNH ---
+    col_left, col_right = st.columns([1, 1.5], gap="large")
+    selected_account_data = None
+    selected_filename = None
 
-    for x in acc_list:
-        if "active" not in x: x["active"] = False
-    for x in chn_list:
-        if "active" not in x: x["active"] = False
-
-    # --- KHU VỰC 1: CHỌN ---
-    col_left, col_right = st.columns([1, 1], gap="medium")
-
+    # === CỘT TRÁI ===
     with col_left:
-        st.subheader("1. Chọn Tài khoản Chạy")
-        if st.checkbox("✅ Chọn tất cả Tài khoản", key="dash_all_acc"):
-            for acc in acc_list: acc["active"] = True
+        st.subheader("1. Chọn Tài khoản")
+        st.info("💡 Click vào một dòng để xem chi tiết Kênh bên phải.")
 
-        if acc_list:
-            df_acc = pd.DataFrame(acc_list)
-            if "tiktok_id" not in df_acc.columns: df_acc["tiktok_id"] = "---"
-            edited_acc = st.data_editor(
-                df_acc[["active", "tiktok_id", "email"]],
+        if all_accounts:
+            df_acc = pd.DataFrame(all_accounts)
+
+            # [FIX 1] Thay use_container_width=True thành width="stretch"
+            selection = st.dataframe(
+                df_acc,
                 column_config={
-                    "active": st.column_config.CheckboxColumn("Chọn", width="small"),
-                    "tiktok_id": st.column_config.TextColumn("ID TikTok", disabled=True),
-                    "email": st.column_config.TextColumn("Email", disabled=True),
+                    "active": st.column_config.CheckboxColumn("Chạy?", width="small"),
+                    "tiktok_id": st.column_config.TextColumn("ID TikTok", width="medium"),
+                    "email": "Email",
+                    "id": None,
+                    "chrome_profile": None,
+                    "video_limit_per_run": None,
+                    "channels": None,
+                    "_filename": None
                 },
-                hide_index=True, width="stretch", key="dash_editor_acc", height=250
+                width="stretch", # <--- ĐÃ SỬA TẠI ĐÂY
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row"
             )
-            updated = edited_acc.to_dict(orient="records")
-            if updated != df_acc[["active", "tiktok_id", "email"]].to_dict(orient="records"):
-                for i, row in enumerate(updated): acc_list[i]["active"] = row["active"]
-                save_json(ACCOUNTS_FILE, {"accounts": acc_list})
-        else: st.info("📭 Chưa có tài khoản.")
 
+            if selection.selection.rows:
+                idx = selection.selection.rows[0]
+                selected_account_data = all_accounts[idx]
+                selected_filename = selected_account_data['_filename']
+            elif all_accounts:
+                selected_account_data = all_accounts[0]
+                selected_filename = selected_account_data['_filename']
+        else:
+            st.warning("📭 Chưa có file cấu hình tài khoản nào.")
+
+    # === CỘT PHẢI ===
     with col_right:
-        st.subheader("2. Chọn Kênh Clone")
-        if st.checkbox("✅ Chọn tất cả Kênh Nguồn", key="dash_all_chn"):
-            for ch in chn_list: ch["active"] = True
+        st.subheader("2. Chi tiết & Kênh Clone")
 
-        if chn_list:
-            df_chn = pd.DataFrame(chn_list)
-            if "last_video_url" not in df_chn.columns: df_chn["last_video_url"] = ""
-            edited_chn = st.data_editor(
-                df_chn[["active", "channel_url", "last_video_url"]],
-                column_config={
-                    "active": st.column_config.CheckboxColumn("Chọn", width="small"),
-                    "channel_url": st.column_config.LinkColumn("Link Kênh", validate="^https://.*"),
-                    "last_video_url": st.column_config.TextColumn("Tiến độ", disabled=True)
-                },
-                hide_index=True, width="stretch", key="dash_editor_chn", height=250
-            )
-            updated_c = edited_chn.to_dict(orient="records")
-            has_change = False
-            for i, row in enumerate(updated_c):
-                if chn_list[i]["active"] != row["active"]:
-                    chn_list[i]["active"] = row["active"]; has_change=True
-            if has_change: save_json(TRACKING_FILE, {"channels": chn_list})
-        else: st.info("📭 Chưa có kênh nguồn.")
+        if selected_account_data:
+            with st.container(border=True):
+                c_head1, c_head2 = st.columns([3, 1])
+                c_head1.markdown(f"#### 👤 {selected_account_data.get('tiktok_id', 'Unknown')}")
+                c_head1.caption(f"Email: {selected_account_data.get('email')}")
 
-    st.markdown("---")
+                is_active = c_head2.toggle("Kích hoạt chạy", value=selected_account_data.get("active", False))
 
-    # --- KHU VỰC 2: LỊCH TRÌNH ---
-    with st.expander("⏰ Cài đặt Lịch trình (Giờ Quét & Giờ Nuôi)", expanded=True):
-        sch_c1, sch_c2 = st.columns(2)
+                if is_active != selected_account_data.get("active", False):
+                    selected_account_data["active"] = is_active
+                    update_account_file(selected_filename, selected_account_data)
+                    st.toast(f"Đã {'BẬT' if is_active else 'TẮT'} tài khoản {selected_account_data['id']}")
+                    time.sleep(0.5); st.rerun()
 
-        # CỘT 1: GIỜ QUÉT
-        with sch_c1:
-            st.markdown("**🕵️ Giờ Quét Video (HH:MM)**")
-            current_crawls = schedule_data.get("crawl_times", [])
+            channels = selected_account_data.get("channels", [])
+            st.markdown(f"**Danh sách Kênh Nguồn ({len(channels)})**")
 
-            c_input, c_btn = st.columns([3, 1])
-            new_crawl_raw = c_input.text_input("Thêm giờ:", placeholder="VD: 07:30", key="in_crawl")
-
-            if c_btn.button("➕", key="btn_add_crawl"):
-                normalized_time = normalize_time_input(new_crawl_raw)
-                if normalized_time:
-                    if normalized_time not in current_crawls:
-                        current_crawls.append(normalized_time)
-                        current_crawls.sort()
-                        schedule_data["crawl_times"] = current_crawls
-                        save_json(SCHEDULE_FILE, schedule_data)
-                        st.success(f"Đã thêm: {normalized_time}")
-                        time.sleep(0.5); st.rerun()
-                    else: st.warning("Giờ này đã có rồi.")
-                else: st.error("Sai định dạng! Hãy nhập HH:MM")
-
-            if current_crawls:
-                st.write("Danh sách giờ:")
-                cols = st.columns(4)
-                for i, t in enumerate(current_crawls):
-                    if cols[i % 4].button(f"{t} ❌", key=f"del_c_{t}"):
-                        current_crawls.remove(t)
-                        schedule_data["crawl_times"] = current_crawls
-                        save_json(SCHEDULE_FILE, schedule_data)
-                        st.rerun()
-            else: st.caption("Chưa đặt giờ quét.")
-
-        # CỘT 2: GIỜ NUÔI
-        with sch_c2:
-            st.markdown("**🍵 Khung Giờ Nuôi Nick**")
-            current_wins = schedule_data.get("nurture_windows", [])
-
-            n1, n2, n3 = st.columns([2, 2, 1])
-            n_start_raw = n1.text_input("Bắt đầu:", placeholder="09:00", key="in_n_start")
-            n_end_raw = n2.text_input("Kết thúc:", placeholder="11:00", key="in_n_end")
-
-            if n3.button("➕", key="btn_add_win"):
-                s_norm = normalize_time_input(n_start_raw)
-                e_norm = normalize_time_input(n_end_raw)
-
-                if s_norm and e_norm:
-                    new_win = {"start": s_norm, "end": e_norm}
-                    if new_win not in current_wins:
-                        current_wins.append(new_win)
-                        schedule_data["nurture_windows"] = current_wins
-                        save_json(SCHEDULE_FILE, schedule_data)
-                        st.success(f"Thêm khung: {s_norm}-{e_norm}")
-                        time.sleep(0.5); st.rerun()
-                else: st.error("Sai định dạng giờ!")
-
-            if current_wins:
-                st.write("Khung giờ:")
-                for i, w in enumerate(current_wins):
-                    c_txt, c_del = st.columns([4, 1])
-                    c_txt.code(f"{w['start']} - {w['end']}")
-                    if c_del.button("❌", key=f"del_w_{i}"):
-                        current_wins.pop(i)
-                        schedule_data["nurture_windows"] = current_wins
-                        save_json(SCHEDULE_FILE, schedule_data)
-                        st.rerun()
-            else: st.caption("Chưa đặt giờ nuôi.")
+            if channels:
+                df_chn = pd.DataFrame(channels)
+                if "url" in df_chn.columns:
+                    # [FIX 1] Thay use_container_width=True thành width="stretch"
+                    st.dataframe(
+                        df_chn[["url", "limit"]],
+                        column_config={
+                            "url": st.column_config.LinkColumn("Link Kênh Nguồn"),
+                            "limit": st.column_config.NumberColumn("Số video/lần"),
+                        },
+                        width="stretch", # <--- ĐÃ SỬA TẠI ĐÂY
+                        hide_index=True
+                    )
+                else:
+                    st.info("Cấu trúc kênh chưa đúng.")
+            else:
+                st.warning("⚠️ Tài khoản này chưa thêm Kênh nguồn nào.")
+        else:
+            st.info("👈 Hãy chọn một tài khoản bên trái.")
 
     st.markdown("---")
 
-    # --- KHU VỰC 3: ACTION BAR ---
-    cnt_acc = sum(1 for a in acc_list if a.get("active"))
-    cnt_chn = sum(1 for c in chn_list if c.get("active"))
+    # --- ACTION BAR ---
+    active_count = sum(1 for acc in all_accounts if acc.get("active"))
 
-    c1, c2, c3 = st.columns([1,1,2])
-    c1.metric("Nick chạy", cnt_acc)
-    c2.metric("Nguồn clone", cnt_chn)
+    col_act1, col_act2 = st.columns([3, 1])
+    col_act1.metric("Số tài khoản đang KÍCH HOẠT chạy:", f"{active_count} / {len(all_accounts)}")
 
-    with c3:
-        upload_limit = st.number_input("Số video mỗi Nick:", min_value=1, max_value=20, value=3)
-        st.write(""); st.write("")
-        if st.button("🚀 KHỞI ĐỘNG HỆ THỐNG", type="primary", width="stretch", disabled=(cnt_acc==0 or cnt_chn==0)):
-            session_conf = {"upload_limit": upload_limit}
-            save_json(SESSION_CONFIG_FILE, session_conf) # [FIX]
-
-            script_path = os.path.join(PROJECT_ROOT, "scheduler_manager.py")
-            if os.path.exists(script_path):
-                st.toast(f"🚀 Khởi động Bot (Limit: {upload_limit}/nick)...")
-                log_box = st.empty()
+    # st.button vẫn dùng use_container_width được (theo document), nhưng nếu warning báo thì bỏ đi cũng được
+    if col_act2.button("🚀 KHỞI ĐỘNG HỆ THỐNG", type="primary", use_container_width=True, disabled=(active_count==0)):
+        script_path = os.path.join(PROJECT_ROOT, "scheduler_manager.py")
+        if os.path.exists(script_path):
+            st.toast("🚀 Đang khởi động Bot...")
+            log_box = st.empty()
+            try:
+                cmd = [sys.executable, "-u", script_path]
+                process = subprocess.Popen(cmd, cwd=PROJECT_ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8')
                 full_log = ""
-                try:
-                    cmd = [sys.executable, "-u", script_path]
-                    process = subprocess.Popen(cmd, cwd=PROJECT_ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace')
-                    while True:
-                        line = process.stdout.readline()
-                        if line:
-                            full_log += line
-                            log_box.code("\n".join(full_log.splitlines()[-15:]), language="bash")
-                        if not line and process.poll() is not None: break
-                    st.success("Bot đã dừng.")
-                except Exception as e: st.error(f"Lỗi: {e}")
-            else: st.error("Thiếu file scheduler_manager.py")
+                while True:
+                    line = process.stdout.readline()
+                    if line:
+                        full_log += line
+                        log_box.code("\n".join(full_log.splitlines()[-10:]), language="bash")
+                    if not line and process.poll() is not None: break
+                st.success("Bot đã dừng.")
+            except Exception as e: st.error(f"Lỗi: {e}")
+        else:
+            st.error("Không tìm thấy file scheduler_manager.py")

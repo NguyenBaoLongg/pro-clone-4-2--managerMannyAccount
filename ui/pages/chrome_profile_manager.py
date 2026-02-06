@@ -4,8 +4,20 @@ import shutil
 import time
 import sys
 import asyncio
+import json
 from ui.utils import AI_STUDIO_DIR
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+USER_SETTINGS_FILE = os.path.join(PROJECT_ROOT, "user_settings.json")
 
+def load_user_settings():
+    """Đọc file user_settings.json"""
+    if not os.path.exists(USER_SETTINGS_FILE): return {}
+    try:
+        with open(USER_SETTINGS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except: return {}
+settings = load_user_settings()
+ai_studio_url = settings.get("ai_studio_url")
 def launch_chrome_for_profile(profile_name):
     """Mở trình duyệt Chrome với profile được chọn để người dùng thao tác"""
 
@@ -54,7 +66,7 @@ def launch_chrome_for_profile(profile_name):
                 });
             """)
 
-            page.goto("https://accounts.google.com/")
+            page.goto("https://ai.studio/apps/drive/19hSBlGZnlzgyM87oebek8LaI64-346kK?fullscreenApplet=true")
 
             status_placeholder.success(f"🟢 **Chrome đang chạy ({profile_name})!**")
             st.warning("👉 Hãy Đăng nhập Google/AI Studio trên cửa sổ Chrome đó.\n\n❌ **SAU KHI XONG, HÃY TẮT CỬA SỔ CHROME ĐỂ LƯU.**")

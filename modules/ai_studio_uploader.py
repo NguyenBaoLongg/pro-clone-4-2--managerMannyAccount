@@ -129,7 +129,7 @@ def handle_google_login(page, email, password):
     except Exception as e:
         print(f"⚠️ Lỗi login (Bỏ qua): {e}")
 
-def run_ai_studio_uploader(local_video_path):
+def run_ai_studio_uploader(local_video_path, specific_profile_name=None, tiktok_id=None):
     print("🧹 Dọn dẹp Chrome cũ...")
     # kill_chrome_processes()
 
@@ -187,11 +187,19 @@ def run_ai_studio_uploader(local_video_path):
             with sync_playwright() as p:
                 try:
                     browser = p.chromium.launch_persistent_context(
-                        user_data_dir=current_user_data_dir, # Sử dụng đường dẫn profile động
+                        user_data_dir=current_user_data_dir,
                         headless=False,
-                        channel="chrome",
-                        args=["--start-maximized", "--disable-blink-features=AutomationControlled", "--no-sandbox", "--disable-infobars"],
-                        viewport=None
+                        channel="chrome", # Hoặc thử bỏ dòng này để dùng Chromium mặc định nếu Chrome lỗi
+                        args=[
+                            "--start-maximized",
+                            "--disable-blink-features=AutomationControlled",
+                            "--no-sandbox",
+                            "--disable-infobars",
+                            "--disable-extensions", # Tắt extension để tránh xung đột
+                            "--disable-background-networking",
+                        ],
+                        viewport=None,
+                        ignore_default_args=["--enable-automation"] # Ẩn dòng "Chrome is being controlled..."
                     )
                 except Exception as e:
                     print(f"❌ Lỗi khởi động Chrome (Profile: {profile_name}): {e}")
@@ -238,7 +246,27 @@ def run_ai_studio_uploader(local_video_path):
                         except: pass
 
                     if not clicked_app: print("⚠️ Có thể đã vào App sẵn...")
-                    time.sleep(15)
+                    time.sleep(10)
+
+                    if tiktok_id:
+                        print(f"✍️ Đang điền ID: {tiktok_id}...")
+                        id_filled = False
+                        id_selector = 'input[placeholder="username hoặc ID video..."]'
+                        start_fill = time.time()
+                        while time.time() - start_fill < 10:
+                            for frame in [page.main_frame] + page.frames:
+                                try:
+                                    inp = frame.locator(id_selector).first
+                                    if inp.is_visible():
+                                        inp.click(); inp.fill(""); time.sleep(0.5)
+                                        inp.fill(str(tiktok_id))
+                                        print("✅ Đã điền ID thành công.")
+                                        id_filled = True; break
+                                except: continue
+                            if id_filled: break
+                            time.sleep(1)
+                        if not id_filled: print("⚠️ Không tìm thấy ô nhập ID.")
+                        time.sleep(2)
 
                     print("📤 Upload Video...")
                     upload_selector = 'input[type="file"][accept="video/*"]'
@@ -347,5 +375,18 @@ def run_ai_studio_uploader(local_video_path):
     print("❌ [Multi-Profile] Đã thử tất cả Profile nhưng đều thất bại!")
     return False
 
+def test_module_isolated():
+    target_video = r"D:\US\Lõm Hóp\Videos\a.mp4"
+    test_tiktok_id = "@TEST_DEBUG_MODE_123"
+    try:
+        success = run_ai_studio_uploader(local_video_path=target_video, tiktok_id=test_tiktok_id)
+        print("-" * 50)
+        if success: print("🎉 TEST THÀNH CÔNG!")
+        else: print("💥 TEST THẤT BẠI.")
+    except KeyboardInterrupt: print("\n🛑 Đã dừng test.")
+    except Exception as e:
+        print(f"\n🔥 LỖI CRASH: {e}")
+        import traceback; traceback.print_exc()
+
 if __name__ == "__main__":
-    run_ai_studio_uploader(r"D:\workspace\Python\App\only-clone\assets\temp_downloads\src_7602865180183252231_1770193277.mp4")
+    test_module_isolated()

@@ -13,6 +13,30 @@
             "scan_limit": 5,
             "video_index": 0,
             "active": true
+        },
+        {
+            "channel_url": "https://www.tiktok.com/@vietnamhealthnews",
+            "last_video_url": "",
+            "scan_limit": 3,
+            "active": true
+        },
+        {
+            "channel_url": "https://www.tiktok.com/@tintucthammy24h",
+            "last_video_url": "",
+            "scan_limit": 3,
+            "active": true
+        },
+        {
+            "channel_url": "https://www.tiktok.com/@d.v.t.g.3.6.9",
+            "last_video_url": "",
+            "scan_limit": 3,
+            "active": true
+        },
+        {
+            "channel_url": "https://www.tiktok.com/@hanoinews.theanh28",
+            "last_video_url": "",
+            "scan_limit": 3,
+            "active": true
         }
     ]
 }
